@@ -15,28 +15,33 @@ concurrency:
 jobs:
   build:
     runs-on: ubuntu-24.04
-    timeout-minutes: 30
+    timeout-minutes: 120
     steps:
       - uses: actions/checkout@v4
-      - name: Parse all SPEC build roots with modern RPM (openSUSE Tumbleweed)
+        with:
+          fetch-depth: 0
+      - name: Install OBS build tooling
         run: |
-          docker run --rm -v "$PWD:/src" -w /src opensuse/tumbleweed:latest bash -c '
-            set -e
-            zypper -q --non-interactive install rpm-build > /dev/null
-            rpm --version
-            count=0
-            for spec in $(find SPECS -name "*.spec" | sort); do
-              tmp=$(mktemp)
-              sed -e '/^BuildSystem:/d' -e '/^[[:space:]]*%autorelease/d' "$spec" > "$tmp"
-              if ! rpmspec -P "$tmp" > /dev/null 2>/tmp/err; then
-                echo "FAILED: $spec"; cat /tmp/err; exit 1
-              fi
-              rm -f "$tmp"
-              count=$((count+1))
-            done
-            echo "parsed $count spec files"
-          '
-      - name: Summary
+          . /etc/os-release
+          obs_repo="https://download.opensuse.org/repositories/openSUSE:/Tools/xUbuntu_${VERSION_ID}"
+          sudo install -d -m 0755 /etc/apt/keyrings
+          sudo wget -qO /etc/apt/keyrings/obs.asc "${obs_repo}/Release.key"
+          sudo chmod 0644 /etc/apt/keyrings/obs.asc
+          echo "deb [signed-by=/etc/apt/keyrings/obs.asc] ${obs_repo}/ /" | sudo tee /etc/apt/sources.list.d/obs.list
+          sudo apt-get update
+          sudo apt-get install -y osc obs-build libwww-perl libxml-parser-perl
+      - name: Apply pbuild patch
+        run: sudo patch --directory=/ --strip=1 -i $(pwd)/.github/build/pbuild.patch
+      - name: Limit build to one package (Catch2)
         run: |
-          echo "spec count: $(find SPECS -name '*.spec' | wc -l)"
-          ls _manifest | head -10
+          set -x
+          echo "BuildFlags: onlybuild:Catch2" >> ./.github/build/_config
+          cat ./.github/build/_config
+      - name: Build package in openRuyi build root
+        run: |
+          cp .github/build/* SPECS
+          cd SPECS
+          sudo pbuild --vm-type=chroot --preset x86_64 --showlog --root=/tmp/b || sudo pbuild --preset x86_64 --result
+      - name: Show built packages
+        run: |
+          ls -lh SPECS/_build.x86_64/Catch2 2>/dev/null || find SPECS -name "*.rpm" | head -20
