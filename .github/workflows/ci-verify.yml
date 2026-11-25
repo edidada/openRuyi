@@ -20,7 +20,7 @@ jobs:
       - uses: actions/checkout@v4
       - name: Validate every SPEC build root in the openRuyi build root image
         run: |
-          docker run --rm -v "$PWD:/src" -w /src ghcr.io/openruyi-project/creek-x86_64:latest bash -lc '
+          docker run --rm -v "$PWD:/src" -w /src ghcr.io/openruyi-project/creek-x86_64:latest bash -lc 'dnf install -y -q rpm-build >/dev/null && 
             set -e
             count=0
             for spec in $(find SPECS -name "*.spec" | sort); do
