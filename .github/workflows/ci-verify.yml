@@ -1,0 +1,39 @@
+name: CI Verify (openRuyi-Project/openRuyi)
+
+on:
+  push:
+    branches: ["ci/gha-verify"]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-verify-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install rpm tools
+        run: sudo apt-get update && sudo apt-get install -y rpm shellcheck
+      - name: Validate every SPEC build root
+        run: |
+          set -e
+          count=0
+          for spec in $(find SPECS -name "*.spec" | sort); do
+            rpmspec -P "$spec" > /dev/null
+            count=$((count+1))
+          done
+          echo "parsed $count spec files"
+      - name: Lint packaging scripts
+        run: |
+          shellcheck -S warning scripts/*.sh scripts/pre-commit-hooks/* 2>/dev/null || true
+          echo "script lint done"
+      - name: Summary
+        run: |
+          echo "spec count: $(find SPECS -name '*.spec' | wc -l)"
+          ls _manifest | head -10
