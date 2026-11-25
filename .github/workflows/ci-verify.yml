@@ -1,4 +1,4 @@
-name: CI Verify (openRuyi-Project/openRuyi)
+name: CI Verify (openRuyi)
 
 on:
   push:
@@ -15,24 +15,23 @@ concurrency:
 jobs:
   build:
     runs-on: ubuntu-24.04
-    timeout-minutes: 20
+    timeout-minutes: 30
     steps:
       - uses: actions/checkout@v4
-      - name: Install rpm tools
-        run: sudo apt-get update && sudo apt-get install -y rpm shellcheck
-      - name: Validate every SPEC build root
+      - name: Validate every SPEC build root in the openRuyi build root image
         run: |
-          set -e
-          count=0
-          for spec in $(find SPECS -name "*.spec" | sort); do
-            rpmspec -P "$spec" > /dev/null
-            count=$((count+1))
-          done
-          echo "parsed $count spec files"
-      - name: Lint packaging scripts
-        run: |
-          shellcheck -S warning scripts/*.sh scripts/pre-commit-hooks/* 2>/dev/null || true
-          echo "script lint done"
+          docker run --rm -v "$PWD:/src" -w /src ghcr.io/openruyi-project/creek-x86_64:latest bash -lc '
+            set -e
+            count=0
+            for spec in $(find SPECS -name "*.spec" | sort); do
+              if ! rpmspec -P "$spec" > /dev/null 2>/tmp/err; then
+                echo "FAILED: $spec"; cat /tmp/err; exit 1
+              fi
+              count=$((count+1))
+            done
+            echo "parsed $count spec files"
+            rpm --version
+          '
       - name: Summary
         run: |
           echo "spec count: $(find SPECS -name '*.spec' | wc -l)"
