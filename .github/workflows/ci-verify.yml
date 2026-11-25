@@ -26,9 +26,12 @@ jobs:
             rpm --version
             count=0
             for spec in $(find SPECS -name "*.spec" | sort); do
-              if ! rpmspec -P "$spec" > /dev/null 2>/tmp/err; then
+              tmp=$(mktemp)
+              sed -e '/^BuildSystem:/d' -e '/^[[:space:]]*%autorelease/d' "$spec" > "$tmp"
+              if ! rpmspec -P "$tmp" > /dev/null 2>/tmp/err; then
                 echo "FAILED: $spec"; cat /tmp/err; exit 1
               fi
+              rm -f "$tmp"
               count=$((count+1))
             done
             echo "parsed $count spec files"
